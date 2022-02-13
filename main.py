@@ -191,10 +191,7 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                     r = requests.put(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
                                      f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=kv)
                     if check_request(r, "cf"):
-                        print(os.environ.get('UF'))
-                        print(filename)
                         fullfile = os.path.join(os.environ.get('UF'), kv)
-                        print(fullfile)
                         with open(fullfile, "wb+") as fi:
                             fi.write(u.file.read())
                         return {'response': 'Image Uploaded'}
@@ -209,10 +206,12 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
 def user_avatar_delete(__token__: str = '', email: str = 'example@example.com'):
     cft = apikeycheck(__token__)
     if cft:
-        f = user_avatar(__token__, email)
-        os.remove(os.path.join(os.environ.get("UF"), f.text))
+        f = user_avatar(email)
+        os.remove(os.path.join(os.environ.get("UF"), f.replace('https://usercontent.t2v-cdn.co/', '')))
+        h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
+             'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
         r = requests.delete(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                            f"/avatarcdnkeys/values/{email}")
+                            f"/{os.environ.get('CKP')}/values/{email}", headers=h)
         if check_request(r, "cf"):
             return {'response': 'Successfully Deleted'}
         return {'error': 'Failed to Delete'}
