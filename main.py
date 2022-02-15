@@ -2,11 +2,11 @@ import requests
 import random
 import string
 import imghdr
-import shutil
 import whois
 import json
 import os
 from fastapi import FastAPI, File, UploadFile, Form, Response, Request
+from fusionauth.fusionauth_client import FusionAuthClient
 from dotenv import load_dotenv, set_key
 from os.path import join, dirname
 from werkzeug.utils import secure_filename
@@ -14,14 +14,9 @@ from werkzeug.utils import secure_filename
 app = FastAPI()
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
-app.debug = True
 app.secret_key = os.urandom(24)
 UPLOAD_EXTENSIONS = {'.jpg', '.png', '.webp'}
-
-headers = {"Authorization": os.environ.get('FAAK')}
-
-headers_json = {"content-type": "application/json",
-                "Authorization": os.environ.get('FAAK')}
+client = FusionAuthClient(os.environ.get('FA_KEY'), 'https://auth.t2vapis.ch')
 
 info = [
     {
@@ -188,12 +183,19 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                     h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
                          'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
                          'Content-Type': 'text/plain'}
-                    r = requests.put(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                                     f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=kv)
+                    r = requests.put(
+                        f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
+                        f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=kv)
                     if check_request(r, "cf"):
                         fullfile = os.path.join(os.environ.get('UF'), kv)
                         with open(fullfile, "wb+") as fi:
                             fi.write(u.file.read())
+                            data = {
+                                'user': {
+                                    'imageUrl': user_avatar(email)
+                                }
+                            }
+                            client_response = client.create_user(None, data)
                         return {'response': 'Image Uploaded'}
                     return {'error': 'Creating Key Failed'}
                 return {'error': 'File is Invalid'}
@@ -215,51 +217,6 @@ def user_avatar_delete(__token__: str = '', email: str = 'example@example.com'):
         if check_request(r, "cf"):
             return {'response': 'Successfully Deleted'}
         return {'error': 'Failed to Delete'}
-    return auth_error
-
-
-@app.get('/api/v1/org/t2v/identity/u/{email}/dash')
-def user_dash_index(__token__: str = '', email: str = 'example@example.com'):
-    cft = apikeycheck(__token__)
-    if cft:
-        u = "https://identity.t2v.ch/api/user?email=" + email
-        a = requests.get(u, headers=headers)
-        p = json.loads(a.text)
-        k = p['user']['id']
-    return auth_error
-
-
-@app.put('/api/v1/org/t2v/identity/u/{email}/dash/update/{update_type}')
-def user_dash_update(__token__: str = '', email: str = 'example@example.com', username: str = Form(...),
-                     lastname: str = Form(...), firstname: str = Form(...), password: str = Form(...), update_type: str = None):
-    cft = apikeycheck(__token__)
-    if cft:
-        a = requests.get(f"https://identity.t2v.ch/api/user?email={email}", headers=headers)
-        p = json.loads(a.text)
-        k = p['user']['id']
-        if update_type == 'basic_info':
-            c = {
-                'user': {
-                    'firstName': f'{firstname}',
-                    'lastName': f'{lastname}',
-                    'username': f'{username}',
-                }
-            }
-            requests.put(f"https://identity.t2v.ch/api/user/{k}", data=c, headers=headers_json)
-        elif update_type == 'email':
-            c = {
-                'user': {
-                    'email': f'{email}',
-                }
-            }
-            requests.put(f"https://identity.t2v.ch/api/user/{k}", data=c, headers=headers_json)
-        elif update_type == 'password':
-            c = {
-                'user': {
-                    'password': f'{password}',
-                }
-            }
-            requests.put(f"https://identity.t2v.ch/api/user/{k}", data=c, headers=headers_json)
     return auth_error
 
 
