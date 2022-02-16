@@ -1,22 +1,28 @@
-import requests
-import random
-import string
 import imghdr
-import whois
 import json
 import os
-from fastapi import FastAPI, File, UploadFile, Form, Response, Request
-from fusionauth.fusionauth_client import FusionAuthClient
-from dotenv import load_dotenv, set_key
+import random
+import string
+import requests
+import whois
 from os.path import join, dirname
+from dotenv import load_dotenv, set_key
+from fastapi import FastAPI, File, UploadFile, Response, Request
+from fusionauth.fusionauth_client import FusionAuthClient
 from werkzeug.utils import secure_filename
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 app = FastAPI()
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 app.secret_key = os.urandom(24)
 UPLOAD_EXTENSIONS = {'.jpg', '.png', '.webp'}
-client = FusionAuthClient(os.environ.get('FA_KEY'), 'https://auth.t2vapis.ch')
+client = FusionAuthClient(os.environ.get('FA_KEY'), os.environ.get('FA_URL'))
 
 info = [
     {
@@ -64,6 +70,18 @@ def generate_keypairs():
 print(generate_keypairs())
 
 
+def avatar_error_handler():
+    return None
+
+
+@app.get('/test')
+def get_user_id(email):
+    a = client.retrieve_user_by_email(email)
+    p = json.loads(a.text)
+    k = p['user']['id']
+    return k
+
+
 def apikeycheck(token):
     h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
          'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
@@ -87,11 +105,13 @@ def check_request(response, call_type):
 
 
 @app.get('/')
-def home():
+@limiter.limit("10/minute")
+def home(request: Request):
     return info
 
 
 @app.get('/api/v1/status/check')
+@limiter.limit("50/minute")
 async def api_status_get(__token__: str = '', s: str = None, u: str = 'https://t2v.ch'):
     if apikeycheck(__token__):
         if s is not None:
@@ -141,9 +161,12 @@ def blog_posts_query(page, post_type):
     return cf_error
 
 
-@app.post('/api/v1/org/t2v/blog/post/create')
-def blog_posts_create():
-    return None
+@app.post('/api/v1/org/t2v/blog/admin/post/create')
+def blog_posts_create(__token__: str = '', ):
+    cft = apikeycheck(__token__)
+    if cft:
+        return None
+    return auth_error
 
 
 @app.get('/api/v1/org/t2v/identity/u/{email}/inventory/')
@@ -164,9 +187,9 @@ def user_avatar(email: str = 'example@example.com'):
         f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('CKP')}"
         f"/values/{email}", headers=h)
     if check_request(r, "cf"):
-        url = r.text.replace('\\', '')
-        return r'https://usercontent.t2v-cdn.co/{url}'.format(url=url.replace('"', ''))
-    return {'error': 'This User either does not exist or has not set a avatar'}
+        avatar = r.text.replace('\\', '')
+        return r'https://{url}{avatar}'.format(url=os.environ.get('AV_URL'), avatar=avatar.replace('"', ''))
+    return f'https://{os.environ.get("AV_URL")}/default_av'
 
 
 @app.post('/api/v1/org/t2v/identity/u/{email}/inventory/avatar/new')
@@ -195,8 +218,10 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                                     'imageUrl': user_avatar(email)
                                 }
                             }
-                            client_response = client.create_user(None, data)
-                        return {'response': 'Image Uploaded'}
+                            cr = client.update_user(get_user_id(email), data)
+                            if cr.was_successful():
+                                return {'response': 'Image Uploaded'}
+                            return {'error': 'Failed to Add Image to User Profile'}
                     return {'error': 'Creating Key Failed'}
                 return {'error': 'File is Invalid'}
             return {'error': 'File Type Not Allowed'}
@@ -205,18 +230,35 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
 
 
 @app.delete('/api/v1/org/t2v/identity/u/{email}/inventory/avatar/delete')
-def user_avatar_delete(__token__: str = '', email: str = 'example@example.com'):
+async def user_avatar_delete(__token__: str = '', email: str = 'example@example.com'):
     cft = apikeycheck(__token__)
     if cft:
         f = user_avatar(email)
-        os.remove(os.path.join(os.environ.get("UF"), f.replace('https://usercontent.t2v-cdn.co/', '')))
+        os.remove(os.path.join(os.environ.get("UF"), f.replace(os.environ.get('AV_URL'), '')))
         h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
              'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
         r = requests.delete(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
                             f"/{os.environ.get('CKP')}/values/{email}", headers=h)
         if check_request(r, "cf"):
-            return {'response': 'Successfully Deleted'}
+            data = {
+                'user': {
+                    'imageUrl': f'https://{os.environ.get("AV_URL")}/default_av'
+                }
+            }
+            cr = client.update_user(get_user_id(email), data)
+            if cr.was_successful():
+                return {'response': 'Successfully Deleted'}
+            return {'error': 'Failed to Remove From User Data'}
         return {'error': 'Failed to Delete'}
+    return auth_error
+
+
+@app.put('/api/v1/org/t2v/identity/u/{email}/inventory/avatar/update')
+async def user_avatar_update(__token__: str = '', email: str = 'example@example.com'):
+    cft = apikeycheck(__token__)
+    if cft:
+        await user_avatar_delete(__token__, email)
+        await user_avatar_new()
     return auth_error
 
 
