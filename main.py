@@ -70,15 +70,17 @@ def generate_keypairs():
 print(generate_keypairs())
 
 
-def avatar_error_handler():
-    return None
+def avatar_error_handler(response):
+    a = response['code']
+    if int(a) < 3000:
+        return True
+    return False
 
 
-@app.get('/test')
 def get_user_id(email):
     a = client.retrieve_user_by_email(email)
-    p = json.loads(a.text)
-    k = p['user']['id']
+    # p = json.loads(a.success_response)
+    k = a.success_response['user']['id']
     return k
 
 
@@ -112,7 +114,7 @@ def home(request: Request):
 
 @app.get('/api/v1/status/check')
 @limiter.limit("50/minute")
-async def api_status_get(__token__: str = '', s: str = None, u: str = 'https://t2v.ch'):
+async def api_status_get(request: Request, __token__: str = '', s: str = None, u: str = 'https://t2v.ch'):
     if apikeycheck(__token__):
         if s is not None:
             if s != 'external':
@@ -120,7 +122,7 @@ async def api_status_get(__token__: str = '', s: str = None, u: str = 'https://t
                 return r.status_code
             r = requests.get(f'https://{u}')
             return r.status_code
-        return {'error': 'Invalid Domain or Service'}
+        return {'error': 'Invalid Domain or Service', 'code': '3010'}
     return auth_error
 
 
@@ -146,7 +148,7 @@ def whois_lookup(d: str = None):
     if d is not None:
         w = whois.query(d)
         return w
-    return {'error': 'Invalid Domain'}
+    return {'error': 'Invalid Domain', 'code': '3009'}
 
 
 @app.get('/api/v1/org/t2v/blog/posts/{type}/{page}')
@@ -188,7 +190,7 @@ def user_avatar(email: str = 'example@example.com'):
         f"/values/{email}", headers=h)
     if check_request(r, "cf"):
         avatar = r.text.replace('\\', '')
-        return r'https://{url}{avatar}'.format(url=os.environ.get('AV_URL'), avatar=avatar.replace('"', ''))
+        return r'https://{url}/{avatar}'.format(url=os.environ.get('AV_URL'), avatar=avatar.replace('"', ''))
     return f'https://{os.environ.get("AV_URL")}/default_av'
 
 
@@ -210,22 +212,24 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                         f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
                         f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=kv)
                     if check_request(r, "cf"):
-                        fullfile = os.path.join(os.environ.get('UF'), kv)
+                        fullfile = os.path.join(os.environ.get('UF'), kv + file_ext)
                         with open(fullfile, "wb+") as fi:
                             fi.write(u.file.read())
                             data = {
                                 'user': {
+                                    'email': email,
                                     'imageUrl': user_avatar(email)
                                 }
                             }
-                            cr = client.update_user(get_user_id(email), data)
+                            user_id = get_user_id(email)
+                            cr = client.update_user(user_id, data)
                             if cr.was_successful():
-                                return {'response': 'Image Uploaded'}
-                            return {'error': 'Failed to Add Image to User Profile'}
-                    return {'error': 'Creating Key Failed'}
-                return {'error': 'File is Invalid'}
-            return {'error': 'File Type Not Allowed'}
-        return {'error': 'Invalid File Name'}
+                                return {'response': 'Image Uploaded', 'code': '2002'}
+                            return {'error': 'Failed to Add Image to User Profile', 'code': '3008'}
+                    return {'error': 'Creating Key Failed', 'code': '3007'}
+                return {'error': 'File is Invalid', 'code': '3006'}
+            return {'error': 'File Type Not Allowed', 'code': '3005'}
+        return {'error': 'Invalid File Name', 'code': '3004'}
     return auth_error
 
 
@@ -234,7 +238,7 @@ async def user_avatar_delete(__token__: str = '', email: str = 'example@example.
     cft = apikeycheck(__token__)
     if cft:
         f = user_avatar(email)
-        os.remove(os.path.join(os.environ.get("UF"), f.replace(os.environ.get('AV_URL'), '')))
+        os.remove(os.path.join(os.environ.get("UF"), f.replace(f"https://{os.environ.get('AV_URL')}/", '')))
         h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
              'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
         r = requests.delete(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
@@ -242,23 +246,30 @@ async def user_avatar_delete(__token__: str = '', email: str = 'example@example.
         if check_request(r, "cf"):
             data = {
                 'user': {
+                    'email': email,
                     'imageUrl': f'https://{os.environ.get("AV_URL")}/default_av'
                 }
             }
-            cr = client.update_user(get_user_id(email), data)
+            user_id = get_user_id(email)
+            cr = client.update_user(user_id, data)
             if cr.was_successful():
-                return {'response': 'Successfully Deleted'}
-            return {'error': 'Failed to Remove From User Data'}
-        return {'error': 'Failed to Delete'}
+                return {'response': 'Successfully Deleted', 'code': '2001'}
+            return {'error': 'Failed to Remove From User Data', 'code': '3002'}
+        return {'error': 'Failed to Delete', 'code': '3001'}
     return auth_error
 
 
 @app.put('/api/v1/org/t2v/identity/u/{email}/inventory/avatar/update')
-async def user_avatar_update(__token__: str = '', email: str = 'example@example.com'):
+async def user_avatar_update(__token__: str = '', email: str = 'example@example.com', u: UploadFile = File(...)):
     cft = apikeycheck(__token__)
     if cft:
-        await user_avatar_delete(__token__, email)
-        await user_avatar_new()
+        r = await user_avatar_delete(__token__, email)
+        if avatar_error_handler(r):
+            r2 = await user_avatar_new(__token__, email, u)
+            if avatar_error_handler(r2):
+                return {'response': 'Avatar Update Succeded', 'code': '2003'}
+            return {'error': 'Failed to Delete Old Avatar', 'code': '3011'}
+        return {'error': 'Failed to Delete Old Avatar', 'code': '3011'}
     return auth_error
 
 
