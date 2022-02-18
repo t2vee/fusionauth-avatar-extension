@@ -106,6 +106,15 @@ def check_request(response, call_type):
         return False
 
 
+def file_size_in_mb(bytes_size):
+    i = 0
+    while bytes_size >= 1024:
+        bytes_size /= 1024.
+        i += 1
+    f = ('%.2f' % bytes_size).rstrip('0').rstrip('.')
+    return float(f)
+
+
 @app.get('/')
 @limiter.limit("10/minute")
 def home(request: Request):
@@ -191,7 +200,7 @@ def user_avatar(email: str = 'example@example.com'):
     if check_request(r, "cf"):
         avatar = r.text.replace('\\', '')
         return r'https://{url}/{avatar}'.format(url=os.environ.get('AV_URL'), avatar=avatar.replace('"', ''))
-    return f'https://{os.environ.get("AV_URL")}/default_av'
+    return {'response': f'https://{os.environ.get("AV_URL")}/default_av'}
 
 
 @app.post('/api/v1/org/t2v/identity/u/{email}/inventory/avatar/new')
@@ -199,36 +208,40 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
     cft = apikeycheck(__token__)
     if cft:
         filename = secure_filename(u.filename)
+        img_check = imghdr.what(u.file)
         if filename != '':
-            file_ext = os.path.splitext(filename)[1]
-            if file_ext in UPLOAD_EXTENSIONS:
-                if imghdr.what(u.file) == file_ext.replace('.', ''):
-                    letters = string.ascii_letters
-                    kv = ''.join(random.choice(letters) for _ in range(64))
-                    h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-                         'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
-                         'Content-Type': 'text/plain'}
-                    r = requests.put(
-                        f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                        f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=kv)
-                    if check_request(r, "cf"):
-                        fullfile = os.path.join(os.environ.get('UF'), kv + file_ext)
-                        with open(fullfile, "wb+") as fi:
-                            fi.write(u.file.read())
-                            data = {
-                                'user': {
-                                    'email': email,
-                                    'imageUrl': user_avatar(email)
+            fs = u.file.read()
+            if file_size_in_mb(len(fs)) < float(os.environ.get('MUS')):
+                file_ext = os.path.splitext(filename)[1]
+                if file_ext in UPLOAD_EXTENSIONS:
+                    if img_check == file_ext.replace('.', ''):
+                        letters = string.ascii_letters
+                        kv = ''.join(random.choice(letters) for _ in range(64))
+                        h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
+                             'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
+                             'Content-Type': 'text/plain'}
+                        r = requests.put(
+                            f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
+                            f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=f"{kv}{file_ext}")
+                        if check_request(r, "cf"):
+                            fullfile = os.path.join(os.environ.get('UF'), kv + file_ext)
+                            with open(fullfile, "wb+") as fi:
+                                fi.write(fs)
+                                data = {
+                                    'user': {
+                                        'email': email,
+                                        'imageUrl': user_avatar(email)
+                                    }
                                 }
-                            }
-                            user_id = get_user_id(email)
-                            cr = client.update_user(user_id, data)
-                            if cr.was_successful():
-                                return {'response': 'Image Uploaded', 'code': '2002'}
-                            return {'error': 'Failed to Add Image to User Profile', 'code': '3008'}
-                    return {'error': 'Creating Key Failed', 'code': '3007'}
-                return {'error': 'File is Invalid', 'code': '3006'}
-            return {'error': 'File Type Not Allowed', 'code': '3005'}
+                                user_id = get_user_id(email)
+                                cr = client.update_user(user_id, data)
+                                if cr.was_successful():
+                                    return {'response': 'Image Uploaded', 'code': '2002'}
+                                return {'error': 'Failed to Add Image to User Profile', 'code': '3008'}
+                        return {'error': 'Creating Key Failed', 'code': '3007'}
+                    return {'error': 'File is Invalid', 'code': '3006'}
+                return {'error': 'File Type Not Allowed', 'code': '3005'}
+            return {'error': 'File Too Large', 'code': '3012'}
         return {'error': 'Invalid File Name', 'code': '3004'}
     return auth_error
 
@@ -269,7 +282,7 @@ async def user_avatar_update(__token__: str = '', email: str = 'example@example.
             if avatar_error_handler(r2):
                 return {'response': 'Avatar Update Succeded', 'code': '2003'}
             return {'error': 'Failed to Delete Old Avatar', 'code': '3011'}
-        return {'error': 'Failed to Delete Old Avatar', 'code': '3011'}
+        return {'error': 'Failed to Delete Old Avatar', 'code': '3013'}
     return auth_error
 
 
