@@ -8,6 +8,7 @@ import whois
 from os.path import join, dirname
 from dotenv import load_dotenv, set_key
 from fastapi import FastAPI, File, UploadFile, Response, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fusionauth.fusionauth_client import FusionAuthClient
 from werkzeug.utils import secure_filename
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -17,12 +18,21 @@ from slowapi.errors import RateLimitExceeded
 app = FastAPI()
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
+origins = ["*"]
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 app.secret_key = os.urandom(24)
 UPLOAD_EXTENSIONS = {'.jpg', '.png', '.webp'}
 client = FusionAuthClient(os.environ.get('FA_KEY'), os.environ.get('FA_URL'))
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 info = [
     {
