@@ -19,7 +19,7 @@ from slowapi.errors import RateLimitExceeded
 app = FastAPI()
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-id_gen = pydenticon.Generator(8, 8)
+id_gen = pydenticon.Generator(6, 6)
 origins = ["*"]
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 dotenv_path = join(dirname(__file__), '.env')
