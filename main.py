@@ -315,7 +315,7 @@ async def webhook_avatar_new_default(response: Response, req: Request, auth_toke
                 data = {
                     'user': {
                         'email': email,
-                        'imageUrl': user_avatar(email)
+                        'imageUrl': user_avatar(email)['response']
                     }
                 }
                 user_id = get_user_id(email)
