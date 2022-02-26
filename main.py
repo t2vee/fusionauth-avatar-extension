@@ -203,7 +203,8 @@ def user_avatar(email: str = 'example@example.com'):
         f"/values/{email}", headers=h)
     if check_request(r, "cf"):
         avatar = r.text.replace('\\', '')
-        return {'response': r'https://{url}/{avatar}'.format(url=os.environ.get('AV_URL'), avatar=avatar.replace('"', ''))}
+        return {
+            'response': r'https://{url}/{avatar}'.format(url=os.environ.get('AV_URL'), avatar=avatar.replace('"', ''))}
     return {'response': f'https://{os.environ.get("AV_URL")}/default_av'}
 
 
@@ -293,7 +294,8 @@ async def user_avatar_update(__token__: str = '', email: str = 'example@example.
 
 
 @app.post('/api/v1/webhooks/id/avatar/new_default')
-async def webhook_avatar_new_default(response: Response, req: Request, auth_token: str | None = Header(None, convert_underscores=True)):
+async def webhook_avatar_new_default(response: Response, req: Request,
+                                     auth_token: str | None = Header(None, convert_underscores=True)):
     cft = apikeycheck(auth_token)
     if cft:
         body = await req.json()
@@ -332,23 +334,35 @@ async def webhook_avatar_new_default(response: Response, req: Request, auth_toke
 
 
 @app.post('/api/v1/webhooks/id/avatar/email_update')
-async def webhook_avatar_email_update(response: Response, req: Request, auth_token: str | None = Header(None, convert_underscores=True)):
+async def webhook_avatar_email_update(response: Response, req: Request,
+                                      auth_token: str | None = Header(None, convert_underscores=True)):
     cft = apikeycheck(auth_token)
     if cft:
         body = await req.json()
         prev_email = body['event']['previousEmail']
         email = body['event']['user']['email']
         h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-             'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
-             'Content-Type': 'text/plain'}
-        r = requests.put(
-            f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-            f"/{os.environ.get('CKP')}/values/{prev_email}", headers=h, json=email)
+             'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
+        r = requests.get(
+            f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('CKP')}"
+            f"/values/{prev_email}", headers=h)
         if check_request(r, "cf"):
-            response.status_code = 200
-            return {'error': 'Email key-pair Updated', 'code': '2006'}
-        response.status_code = 462
-        return {'error': 'Failed to update key-pair', 'code': '3018'}
+            r2 = requests.delete(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
+                                 f"/{os.environ.get('CKP')}/values/{prev_email}", headers=h)
+            if check_request(r2, "cf"):
+                avatar = r.text.replace('\\', '')
+                r3 = requests.put(
+                    f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
+                    f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=avatar)
+                if check_request(r3, "cf"):
+                    response.status_code = 200
+                    return {'error': 'Email key-pair Updated', 'code': '2006'}
+                response.status_code = 462
+                return {'error': 'Failed to Delete key-pair', 'code': '3018'}
+            response.status_code = 464
+            return {'error': 'Failed to update key-pair', 'code': '3020'}
+        response.status_code = 463
+        return {'error': 'Failed to get key-pair', 'code': '3019'}
     response.status_code = 401
     return auth_error
 
