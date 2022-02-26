@@ -332,7 +332,7 @@ async def webhook_avatar_new_default(response: Response, req: Request, auth_toke
 
 
 @app.post('/api/v1/webhooks/id/avatar/email_update')
-def webhook_avatar_email_update(response: Response, req: Request, auth_token: str | None = Header(None, convert_underscores=True)):
+async def webhook_avatar_email_update(response: Response, req: Request, auth_token: str | None = Header(None, convert_underscores=True)):
     cft = apikeycheck(auth_token)
     if cft:
         body = await req.json()
