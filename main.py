@@ -236,7 +236,7 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                                 data = {
                                     'user': {
                                         'email': email,
-                                        'imageUrl': user_avatar(email)
+                                        'imageUrl': user_avatar(email)['response']
                                     }
                                 }
                                 user_id = get_user_id(email)
