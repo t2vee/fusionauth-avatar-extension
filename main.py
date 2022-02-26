@@ -351,9 +351,10 @@ async def webhook_avatar_email_update(response: Response, req: Request,
                                  f"/{os.environ.get('CKP')}/values/{prev_email}", headers=h)
             if check_request(r2, "cf"):
                 avatar = r.text.replace('\\', '')
+                avatar2 = avatar.replace('"', '')
                 r3 = requests.put(
                     f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                    f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=avatar)
+                    f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=avatar2)
                 if check_request(r3, "cf"):
                     response.status_code = 200
                     return {'error': 'Email key-pair Updated', 'code': '2006'}
@@ -369,10 +370,18 @@ async def webhook_avatar_email_update(response: Response, req: Request,
 
 # TODO Finish Fusionauth Webhooks
 @app.post('/api/v1/webhooks/id/avatar/account_delete')
-def webhook_avatar_account_delete(auth_token: str | None = Header(None, convert_underscores=True)):
+async def webhook_avatar_account_delete(response: Response, req: Request, auth_token: str | None = Header(None, convert_underscores=True)):
     cft = apikeycheck(auth_token)
     if cft:
-        return False
+        body = await req.json()
+        email = body['event']['user']['email']
+        r = await user_avatar_delete(auth_token, email)
+        if r['code'] == '2001':
+            response.status_code = 200
+            return {'error': 'Successfully Deleted', 'code': '2006'}
+        response.status_code = 464
+        return {'error': 'Failed to delete', 'code': '3021'}
+    response.status_code = 401
     return auth_error
 
 
