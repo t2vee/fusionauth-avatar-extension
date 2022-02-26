@@ -298,7 +298,6 @@ async def webhook_avatar_new_default(response: Response, req: Request, auth_toke
     if cft:
         body = await req.json()
         email = body['event']['auditLog']['insertUser']
-        print(email)
         identicon = id_gen.generate(email, 240, 240, output_format="png")
         letters = string.ascii_letters
         kv = ''.join(random.choice(letters) for _ in range(64))
@@ -324,9 +323,9 @@ async def webhook_avatar_new_default(response: Response, req: Request, auth_toke
                 if cr.was_successful():
                     response.status_code = 200
                     return {'response': 'Default Avatar Created', 'code': '2005'}
-                response.status_code = 3008
+                response.status_code = 400
                 return {'error': 'Failed to Add Image to User Profile', 'code': '3008'}
-        response.status_code = 3007
+        response.status_code = 400
         return {'error': 'Creating File Key Failed', 'code': '3007'}
     response.status_code = 401
     return auth_error
