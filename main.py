@@ -253,7 +253,7 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
 
 
 @app.delete('/api/v1/id/u/{email}/inventory/avatar_delete')
-async def user_avatar_delete(__token__: str = '', email: str = 'example@example.com'):
+async def user_avatar_delete(__token__: str = '', email: str = 'example@example.com', action: str = 'full'):
     cft = apikeycheck(__token__)
     if cft:
         f = user_avatar(email)['response']
@@ -264,17 +264,20 @@ async def user_avatar_delete(__token__: str = '', email: str = 'example@example.
                             f"/{os.environ.get('CKP')}/values/{email}", headers=h)
         # TODO Change this to use/generate default avatar
         if check_request(r, "cf"):
-            data = {
-                'user': {
-                    'email': email,
-                    'imageUrl': ''
+            if action == 'full':
+                data = {
+                    'user': {
+                        'email': email,
+                        'imageUrl': ''
+                    }
                 }
-            }
-            user_id = get_user_id(email)
-            cr = client.update_user(user_id, data)
-            if cr.was_successful():
+                user_id = get_user_id(email)
+                cr = client.update_user(user_id, data)
+                if cr.was_successful():
+                    return {'response': 'Successfully Deleted', 'code': '2001'}
+                return {'error': 'Failed to Remove From User Data', 'code': '3002'}
+            else:
                 return {'response': 'Successfully Deleted', 'code': '2001'}
-            return {'error': 'Failed to Remove From User Data', 'code': '3002'}
         return {'error': 'Failed to Delete', 'code': '3001'}
     return auth_error
 
@@ -283,7 +286,7 @@ async def user_avatar_delete(__token__: str = '', email: str = 'example@example.
 async def user_avatar_update(__token__: str = '', email: str = 'example@example.com', u: UploadFile = File(...)):
     cft = apikeycheck(__token__)
     if cft:
-        r = await user_avatar_delete(__token__, email)
+        r = await user_avatar_delete(__token__, email, 'full')
         if avatar_error_handler(r):
             r2 = await user_avatar_new(__token__, email, u)
             if avatar_error_handler(r2):
@@ -375,7 +378,7 @@ async def webhook_avatar_account_delete(response: Response, req: Request, auth_t
     if cft:
         body = await req.json()
         email = body['event']['user']['email']
-        r = await user_avatar_delete(auth_token, email)
+        r = await user_avatar_delete(auth_token, email, 'acc_delete')
         if r['code'] == '2001':
             response.status_code = 200
             return {'error': 'Successfully Deleted', 'code': '2006'}
