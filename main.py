@@ -297,7 +297,7 @@ async def webhook_avatar_new_default(response: Response, req: Request, auth_toke
     cft = apikeycheck(auth_token)
     if cft:
         body = await req.json()
-        email = body['user']['email']
+        email = body['event']['user']['email']
         identicon = id_gen.generate(email, 240, 240, output_format="png")
         letters = string.ascii_letters
         kv = ''.join(random.choice(letters) for _ in range(64))
