@@ -126,6 +126,35 @@ def file_size_in_mb(bytes_size):
     return float(f)
 
 
+def gen_def_av(email):
+    identicon = id_gen.generate(email, 240, 240, output_format="png")
+    letters = string.ascii_letters
+    kv = ''.join(random.choice(letters) for _ in range(64))
+    h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
+         'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
+         'Content-Type': 'text/plain'}
+    r = requests.put(
+        f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
+        f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=f"{kv}.png")
+    if check_request(r, "cf"):
+        fullfile = os.path.join(os.environ.get('UF'), kv + '.png')
+        with open(fullfile, "wb+") as fi:
+            fi.write(identicon)
+            fi.close()
+            data = {
+                'user': {
+                    'email': email,
+                    'imageUrl': user_avatar(email)['response']
+                }
+            }
+            user_id = get_user_id(email)
+            cr = client.update_user(user_id, data)
+            if cr.was_successful():
+                return {'response': 'Default Avatar Created', 'code': 2005}
+            return {'error': 'Failed to Add Image to User Profile', 'code': 3008}
+    return {'error': 'Creating File Key Failed', 'code': 3007}
+
+
 @app.get('/')
 @limiter.limit("10/minute")
 def home(request: Request):
@@ -303,36 +332,17 @@ async def webhook_avatar_new_default(response: Response, req: Request,
     if cft:
         body = await req.json()
         email = body['event']['user']['email']
-        identicon = id_gen.generate(email, 240, 240, output_format="png")
-        letters = string.ascii_letters
-        kv = ''.join(random.choice(letters) for _ in range(64))
-        h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-             'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
-             'Content-Type': 'text/plain'}
-        r = requests.put(
-            f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-            f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=f"{kv}.png")
-        if check_request(r, "cf"):
-            fullfile = os.path.join(os.environ.get('UF'), kv + '.png')
-            with open(fullfile, "wb+") as fi:
-                fi.write(identicon)
-                fi.close()
-                data = {
-                    'user': {
-                        'email': email,
-                        'imageUrl': user_avatar(email)['response']
-                    }
-                }
-                user_id = get_user_id(email)
-                cr = client.update_user(user_id, data)
-                if cr.was_successful():
-                    response.status_code = 200
-                    return {'response': 'Default Avatar Created', 'code': '2005'}
+        r = gen_def_av(email)
+        match r:
+            case 3007:
+                response.status_code = 460
+                return {'error': 'Creating key-pair Failed'}
+            case 3008:
                 response.status_code = 461
-                return {'error': 'Failed to Add Image to User Profile', 'code': '3008'}
-        response.status_code = 460
-        return {'error': 'Creating File Key Failed', 'code': '3007'}
-    response.status_code = 401
+                return {'error': 'Failed to add image to user profile'}
+            case 2005:
+                response.status_code = 200
+                return {'response': 'default avatar crated'}
     return auth_error
 
 
@@ -371,7 +381,6 @@ async def webhook_avatar_email_update(response: Response, req: Request,
     return auth_error
 
 
-# TODO Finish Fusionauth Webhooks
 @app.post('/api/v1/webhooks/id/avatar/account_delete')
 async def webhook_avatar_account_delete(response: Response, req: Request, auth_token: str | None = Header(None, convert_underscores=True)):
     cft = apikeycheck(auth_token)
