@@ -256,7 +256,7 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
 async def user_avatar_delete(__token__: str = '', email: str = 'example@example.com'):
     cft = apikeycheck(__token__)
     if cft:
-        f = user_avatar(email)
+        f = user_avatar(email)['response']
         os.remove(os.path.join(os.environ.get("UF"), f.replace(f"https://{os.environ.get('AV_URL')}/", '')))
         h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
              'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
