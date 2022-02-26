@@ -337,7 +337,7 @@ async def webhook_avatar_email_update(response: Response, req: Request, auth_tok
     if cft:
         body = await req.json()
         prev_email = body['event']['previousEmail']
-        email = body['event']['email']
+        email = body['event']['user']['email']
         h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
              'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
              'Content-Type': 'text/plain'}
