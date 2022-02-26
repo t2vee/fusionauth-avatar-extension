@@ -266,7 +266,7 @@ async def user_avatar_delete(__token__: str = '', email: str = 'example@example.
             data = {
                 'user': {
                     'email': email,
-                    'imageUrl': f'https://{os.environ.get("AV_URL")}/default_av'
+                    'imageUrl': ''
                 }
             }
             user_id = get_user_id(email)
@@ -331,15 +331,29 @@ async def webhook_avatar_new_default(response: Response, req: Request, auth_toke
     return auth_error
 
 
-# TODO Finish Fusionauth Webhooks
 @app.post('/api/v1/webhooks/id/avatar/email_update')
-def webhook_avatar_email_update(auth_token: str | None = Header(None, convert_underscores=True)):
+def webhook_avatar_email_update(response: Response, req: Request, auth_token: str | None = Header(None, convert_underscores=True)):
     cft = apikeycheck(auth_token)
     if cft:
-        return False
+        body = await req.json()
+        prev_email = body['event']['previousEmail']
+        email = body['event']['email']
+        h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
+             'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
+             'Content-Type': 'text/plain'}
+        r = requests.put(
+            f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
+            f"/{os.environ.get('CKP')}/values/{prev_email}", headers=h, json=email)
+        if check_request(r, "cf"):
+            response.status_code = 200
+            return {'error': 'Email key-pair Updated', 'code': '2006'}
+        response.status_code = 462
+        return {'error': 'Failed to update key-pair', 'code': '3018'}
+    response.status_code = 401
     return auth_error
 
 
+# TODO Finish Fusionauth Webhooks
 @app.post('/api/v1/webhooks/id/avatar/account_delete')
 def webhook_avatar_account_delete(auth_token: str | None = Header(None, convert_underscores=True)):
     cft = apikeycheck(auth_token)
