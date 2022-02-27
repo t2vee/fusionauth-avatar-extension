@@ -333,7 +333,7 @@ async def webhook_avatar_new_default(response: Response, req: Request,
         body = await req.json()
         email = body['event']['user']['email']
         r = gen_def_av(email)
-        match r:
+        match r['code']:
             case 3007:
                 response.status_code = 460
                 return {'error': 'Creating key-pair Failed'}
