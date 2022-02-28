@@ -176,24 +176,7 @@ async def api_status_get(request: Request, __token__: str = '', s: str = None, u
     return auth_error
 
 
-@app.get('/api/v1/status/check/all')
-def api_status_all(__token__: str = ''):
-    cft = apikeycheck(__token__)
-    if cft:
-        u = ['https://t2v.ch/api/status/endpoint', 'https://ore.ink/api/status/endpoint',
-             'https://api.ore.ink/api/status/endpoint', 'https://indentity.t2v.ch/api/status',
-             'https://static.t2v-cdn.co/api/status/endpoint', 'https://usercontent.t2v-cdn.co/api/status/endpoint',
-             'https://icu.ore.ink/misc/user/logo-header.png?matomo',
-             'https://mail.ore.ink/cloud/index.php/apps/theming/image/logoheader?v=42']
-        for x in u:
-            r = requests.get(x)
-            if 400 <= r.status_code <= 600:
-                return {'error': 'Not all services are online'}
-        return {'response': 'All services are online'}
-    return auth_error
-
-
-# TODO Fix Whois Looup
+# TODO Fix Whois Lookup
 @app.get('/api/v1/whois/lookup')
 def whois_lookup(d: str = None):
     if d is not None:
@@ -291,13 +274,12 @@ async def user_avatar_delete(__token__: str = '', email: str = 'example@example.
              'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
         r = requests.delete(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
                             f"/{os.environ.get('CKP')}/values/{email}", headers=h)
-        # TODO Change this to use/generate default avatar
         if check_request(r, "cf"):
             if action == 'full':
                 data = {
                     'user': {
                         'email': email,
-                        'imageUrl': ''
+                        'imageUrl': gen_def_av(email)
                     }
                 }
                 user_id = get_user_id(email)
