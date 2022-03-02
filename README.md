@@ -1,4 +1,4 @@
-# t2vfastapi
+# t2vFastApi
 Used as a api backend made with python and fastapi for t2v and its subsidiaries.
 
 To setup:
@@ -7,4 +7,4 @@ To setup:
 </br>Run pip install -r requirements.txt
 </br>Change the .env to your requirements
 </br>Install chosen webserver
-</br>Point webserver virtualenv to agsi.py
+</br>Point webserver to port 8081
