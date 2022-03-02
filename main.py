@@ -27,7 +27,6 @@ load_dotenv(dotenv_path)
 app.secret_key = os.urandom(24)
 UPLOAD_EXTENSIONS = {'.jpg', '.png', '.webp'}
 client = FusionAuthClient(os.environ.get('FA_KEY'), os.environ.get('FA_URL'))
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -35,33 +34,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-info = [
-    {
-        'description': 'Congrats! You have made a call to the ore-ink api, Remember this api is only for '
-                       't2v.ch and its subsidiaries, is not for public use! If you wish to access my public api you '
-                       'can head over to t2v.ch/api. This service requires the use of a dynamic authentication token.'}
-]
-
 auth_error = {'error': 'Failed Authentication'}
-
 cf_error = {'error': 'Request to Cloudflare failed. Is Cloudflare down?'}
+cf_headers = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
+              'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
 
 
 def generate_keypairs():
     if os.environ['FTS'] == "False":
-        h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-             'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
-             'Content-Type': 'application/json'}
         ar = requests.post(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces",
-                           headers=h, json={'title': 'apiKeyCheck'})
+                           headers=cf_headers, json={'title': 'apiKeyCheck'})
         br = requests.post(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces",
-                           headers=h, json={'title': 'blogIndex'})
+                           headers=cf_headers, json={'title': 'blogIndex'})
+        cr = requests.post(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces",
+                           headers=cf_headers, json={'title': 'shortLinkIndex'})
         r = requests.post(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces",
-                          headers=h, json={'title': 'avatarCdnKeys'})
+                          headers=cf_headers, json={'title': 'avatarCdnKeys'})
         p = json.loads(r.text)
         ap = json.loads(ar.text)
         bp = json.loads(br.text)
+        cp = json.loads(br.text)
         k = p['success']
         if k:
             os.environ['CKP'] = p['result']['id']
@@ -70,6 +62,8 @@ def generate_keypairs():
             set_key(dotenv_path, "TCNSID", os.environ["TCNSID"])
             os.environ['BI'] = bp['result']['id']
             set_key(dotenv_path, "BI", os.environ["BI"])
+            os.environ['LKI'] = cp['result']['id']
+            set_key(dotenv_path, "LKI", os.environ["LKI"])
             os.environ['FTS'] = "True"
             set_key(dotenv_path, "FTS", os.environ["FTS"])
             return "Initial Setup Completed"
@@ -96,11 +90,9 @@ def get_user_id(email):
 
 
 def apikeycheck(token):
-    h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-         'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
     r = requests.get(
         f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('TCNSID')}/values/{token}",
-        headers=h)
+        headers=cf_headers)
     if r.text == token:
         return True
     return False
@@ -130,12 +122,9 @@ def gen_def_av(email):
     identicon = id_gen.generate(email, 240, 240, output_format="png")
     letters = string.ascii_letters
     kv = ''.join(random.choice(letters) for _ in range(64))
-    h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-         'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
-         'Content-Type': 'text/plain'}
     r = requests.put(
         f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-        f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=f"{kv}.png")
+        f"/{os.environ.get('CKP')}/values/{email}", headers=cf_headers, json=f"{kv}.png")
     if check_request(r, "cf"):
         fullfile = os.path.join(os.environ.get('UF'), kv + '.png')
         with open(fullfile, "wb+") as fi:
@@ -156,9 +145,10 @@ def gen_def_av(email):
 
 
 @app.get('/')
-@limiter.limit("10/minute")
+@limiter.limit("100/minute")
 def home(request: Request):
-    return info
+    return {'response': 'Welcome to the t2v-main-api, Remember this api is only for t2v.ch and its subsidiaries, '
+                        'is not for public use! If you wish to access my public api you can head over to t2v.ch/api.'}
 
 
 # TODO Rewrite Status Checking
@@ -185,19 +175,17 @@ def whois_lookup(d: str = None):
     return {'error': 'Invalid Domain', 'code': '3009'}
 
 
+# TODO Finish Blog Post Admin Panel
 @app.get('/api/v1/blog/posts/{type}/{page}')
 def blog_posts_query(page, post_type):
-    h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-         'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
     r = requests.get(
         f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('BI')}"
-        f"/values/keys?prefix={post_type}_{page}", headers=h)
+        f"/values/keys?prefix={post_type}_{page}", headers=cf_headers)
     if check_request(r, "cf"):
         return r
     return cf_error
 
 
-# TODO Finish Blog Post Admin Panel
 @app.post('/api/v1/blog/admin/post/create')
 def blog_posts_create(__token__: str = '', ):
     cft = apikeycheck(__token__)
@@ -207,23 +195,23 @@ def blog_posts_create(__token__: str = '', ):
 
 
 @app.get('/api/v1/id/u/{email}/inventory/avatar')
+@limiter.limit("50/minute")
 def user_avatar(email: str = 'example@example.com'):
-    h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-         'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
     r = requests.get(
         f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('CKP')}"
-        f"/values/{email}", headers=h)
+        f"/values/{email}", headers=cf_headers)
     if check_request(r, "cf"):
         avatar = r.text.replace('\\', '')
         return {
             'response': r'https://{url}/{avatar}'.format(url=os.environ.get('AV_URL'), avatar=avatar.replace('"', ''))}
-    return {'response': f'https://{os.environ.get("AV_URL")}/default_av'}
+    return {'error': 'Failed to Grab Avatar key', 'code': '3018'}
 
 
 @app.post('/api/v1/id/u/{email}/inventory/avatar_new')
 async def user_avatar_new(__token__: str = '', email: str = 'example@example.com', u: UploadFile = File(...)):
     cft = apikeycheck(__token__)
     if cft:
+        # TODO Grab NSFW Check from Client JS
         filename = secure_filename(u.filename)
         img_check = imghdr.what(u.file)
         if filename != '':
@@ -232,14 +220,12 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                 file_ext = os.path.splitext(filename)[1]
                 if file_ext in UPLOAD_EXTENSIONS:
                     if img_check == file_ext.replace('.', ''):
+                        # TODO Resize Image to 256x256 (Presumably Handled by JS)
                         letters = string.ascii_letters
                         kv = ''.join(random.choice(letters) for _ in range(64))
-                        h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-                             'Authorization': f'Bearer {os.environ.get("CF_KEY")}',
-                             'Content-Type': 'text/plain'}
                         r = requests.put(
                             f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                            f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=f"{kv}{file_ext}")
+                            f"/{os.environ.get('CKP')}/values/{email}", headers=cf_headers, json=f"{kv}{file_ext}")
                         if check_request(r, "cf"):
                             fullfile = os.path.join(os.environ.get('UF'), kv + file_ext)
                             with open(fullfile, "wb+") as fi:
@@ -270,10 +256,8 @@ async def user_avatar_delete(__token__: str = '', email: str = 'example@example.
     if cft:
         f = user_avatar(email)['response']
         os.remove(os.path.join(os.environ.get("UF"), f.replace(f"https://{os.environ.get('AV_URL')}/", '')))
-        h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-             'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
         r = requests.delete(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                            f"/{os.environ.get('CKP')}/values/{email}", headers=h)
+                            f"/{os.environ.get('CKP')}/values/{email}", headers=cf_headers)
         if check_request(r, "cf"):
             if action == 'full':
                 data = {
@@ -318,13 +302,13 @@ async def webhook_avatar_new_default(response: Response, req: Request,
         match r['code']:
             case 3007:
                 response.status_code = 460
-                return {'error': 'Creating key-pair Failed'}
+                return {'error': 'Creating key-pair Failed', 'code': '3022'}
             case 3008:
                 response.status_code = 461
-                return {'error': 'Failed to add image to user profile'}
+                return {'error': 'Failed to add image to user profile', 'code': '3023'}
             case 2005:
                 response.status_code = 200
-                return {'response': 'default avatar crated'}
+                return {'response': 'default avatar crated', 'code': '2010'}
     return auth_error
 
 
@@ -336,20 +320,18 @@ async def webhook_avatar_email_update(response: Response, req: Request,
         body = await req.json()
         prev_email = body['event']['previousEmail']
         email = body['event']['user']['email']
-        h = {'X-Auth-Email': f'{os.environ.get("CF_EMAIL")}',
-             'Authorization': f'Bearer {os.environ.get("CF_KEY")}'}
         r = requests.get(
             f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('CKP')}"
-            f"/values/{prev_email}", headers=h)
+            f"/values/{prev_email}", headers=cf_headers)
         if check_request(r, "cf"):
             r2 = requests.delete(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                                 f"/{os.environ.get('CKP')}/values/{prev_email}", headers=h)
+                                 f"/{os.environ.get('CKP')}/values/{prev_email}", headers=cf_headers)
             if check_request(r2, "cf"):
                 avatar = r.text.replace('\\', '')
                 avatar2 = avatar.replace('"', '')
                 r3 = requests.put(
                     f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                    f"/{os.environ.get('CKP')}/values/{email}", headers=h, json=avatar2)
+                    f"/{os.environ.get('CKP')}/values/{email}", headers=cf_headers, json=avatar2)
                 if check_request(r3, "cf"):
                     response.status_code = 200
                     return {'error': 'Email key-pair Updated', 'code': '2006'}
@@ -364,7 +346,8 @@ async def webhook_avatar_email_update(response: Response, req: Request,
 
 
 @app.post('/api/v1/webhooks/id/avatar/account_delete')
-async def webhook_avatar_account_delete(response: Response, req: Request, auth_token: str | None = Header(None, convert_underscores=True)):
+async def webhook_avatar_account_delete(response: Response, req: Request,
+                                        auth_token: str | None = Header(None, convert_underscores=True)):
     cft = apikeycheck(auth_token)
     if cft:
         body = await req.json()
