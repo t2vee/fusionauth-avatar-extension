@@ -4,6 +4,7 @@ import whois
 import imghdr
 import random
 import string
+import hashlib
 import requests
 import pydenticon
 from os.path import join, dirname
@@ -124,7 +125,7 @@ def gen_def_av(email):
     kv = ''.join(random.choice(letters) for _ in range(64))
     r = requests.put(
         f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-        f"/{os.environ.get('CKP')}/values/{email}", headers=cf_headers, json=f"{kv}.png")
+        f"/{os.environ.get('CKP')}/values/{convert_md5(email)}", headers=cf_headers, json=f"{kv}.png")
     if check_request(r, "cf"):
         fullfile = os.path.join(os.environ.get('UF'), kv + '.png')
         with open(fullfile, "wb+") as fi:
@@ -142,6 +143,11 @@ def gen_def_av(email):
                 return {'response': 'Default Avatar Created', 'code': 2005}
             return {'error': 'Failed to Add Image to User Profile', 'code': 3008}
     return {'error': 'Creating File Key Failed', 'code': 3007}
+
+
+def convert_md5(email):
+    email_hash = hashlib.md5(email.encode())
+    return email_hash.hexdigest()
 
 
 @app.get('/')
@@ -194,12 +200,12 @@ def blog_posts_create(__token__: str = '', ):
     return auth_error
 
 
-@app.get('/api/v1/id/u/{email}/inventory/avatar')
-@limiter.limit("50/minute")
-def user_avatar(email: str = 'example@example.com'):
+# TODO Input MD5 Hashes Instead of Plaintext
+@app.get('/api/v1/id/u/{email_hash}/inventory/avatar')
+def user_avatar(email_hash: str = 'example@example.com'):
     r = requests.get(
         f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('CKP')}"
-        f"/values/{email}", headers=cf_headers)
+        f"/values/{email_hash}", headers=cf_headers)
     if check_request(r, "cf"):
         avatar = r.text.replace('\\', '')
         return {
@@ -224,8 +230,7 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                         letters = string.ascii_letters
                         kv = ''.join(random.choice(letters) for _ in range(64))
                         r = requests.put(
-                            f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                            f"/{os.environ.get('CKP')}/values/{email}", headers=cf_headers, json=f"{kv}{file_ext}")
+                            f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('CKP')}/values/{convert_md5(email)}", headers=cf_headers, json=f"{kv}{file_ext}")
                         if check_request(r, "cf"):
                             fullfile = os.path.join(os.environ.get('UF'), kv + file_ext)
                             with open(fullfile, "wb+") as fi:
@@ -234,7 +239,7 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                                 data = {
                                     'user': {
                                         'email': email,
-                                        'imageUrl': user_avatar(email)['response']
+                                        'imageUrl': user_avatar(convert_md5(email))['response']
                                     }
                                 }
                                 user_id = get_user_id(email)
