@@ -134,7 +134,7 @@ def gen_def_av(email):
             data = {
                 'user': {
                     'email': email,
-                    'imageUrl': user_avatar(email)['response']
+                    'imageUrl': user_avatar(convert_md5(email))['response']
                 }
             }
             user_id = get_user_id(email)
@@ -259,7 +259,7 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
 async def user_avatar_delete(__token__: str = '', email: str = 'example@example.com', action: str = 'full'):
     cft = apikeycheck(__token__)
     if cft:
-        f = user_avatar(email)['response']
+        f = user_avatar(convert_md5(email))['response']
         os.remove(os.path.join(os.environ.get("UF"), f.replace(f"https://{os.environ.get('AV_URL')}/", '')))
         r = requests.delete(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
                             f"/{os.environ.get('CKP')}/values/{email}", headers=cf_headers)
