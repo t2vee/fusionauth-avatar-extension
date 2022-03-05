@@ -9,7 +9,7 @@ import requests
 import pydenticon
 from os.path import join, dirname
 from dotenv import load_dotenv, set_key
-from fastapi import FastAPI, File, UploadFile, Response, Request, Header
+from fastapi import FastAPI, File, UploadFile, Response, Request, Header, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fusionauth.fusionauth_client import FusionAuthClient
 from werkzeug.utils import secure_filename
@@ -157,19 +157,13 @@ def home(request: Request):
                         'is not for public use! If you wish to access my public api you can head over to t2v.ch/api.'}
 
 
-# TODO Rewrite Status Checking
-@app.get('/api/v1/status/check')
+# TODO Rewrite Status Checking to Support Websockets
+@app.websocket('/api/v1/websocket/status')
 @limiter.limit("50/minute")
-async def api_status_get(request: Request, __token__: str = '', s: str = None, u: str = 'https://t2v.ch'):
-    if apikeycheck(__token__):
-        if s is not None:
-            if s != 'external':
-                r = requests.get(f"https://{s}/api/status/endpoint")
-                return r.status_code
-            r = requests.get(f'https://{u}')
-            return r.status_code
-        return {'error': 'Invalid Domain or Service', 'code': '3010'}
-    return auth_error
+async def api_status_get(request: Request, websocket: WebSocket, __token__: str = ''):
+    # await websocket.accept()
+    # while True:
+    return None
 
 
 # TODO Fix Whois Lookup
@@ -200,7 +194,6 @@ def blog_posts_create(__token__: str = '', ):
     return auth_error
 
 
-# TODO Input MD5 Hashes Instead of Plaintext
 @app.get('/api/v1/id/u/{email_hash}/inventory/avatar')
 def user_avatar(email_hash: str = 'example@example.com'):
     r = requests.get(
@@ -246,13 +239,13 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                                 user_id = get_user_id(email)
                                 cr = client.update_user(user_id, data)
                                 if cr.was_successful():
-                                    return {'response': 'Image Uploaded', 'code': '2002'}
-                                return {'error': 'Failed to Add Image to User Profile', 'code': '3008'}
-                        return {'error': 'Creating File Key Failed', 'code': '3007'}
-                    return {'error': 'File is Invalid', 'code': '3006'}
-                return {'error': 'File Type Not Allowed', 'code': '3005'}
-            return {'error': 'File Too Large', 'code': '3012'}
-        return {'error': 'Invalid File Name', 'code': '3004'}
+                                    return {'response': 'Image Uploaded', 'code': 2002}
+                                return {'error': 'Failed to Add Image to User Profile', 'code': 3008}
+                        return {'error': 'Creating File Key Failed', 'code': 3007}
+                    return {'error': 'File is Invalid', 'code': 3006}
+                return {'error': 'File Type Not Allowed', 'code': 3005}
+            return {'error': 'File Too Large', 'code': 3012}
+        return {'error': 'Invalid File Name', 'code': 3004}
     return auth_error
 
 
@@ -266,15 +259,8 @@ async def user_avatar_delete(__token__: str = '', email: str = 'example@example.
                             f"/{os.environ.get('CKP')}/values/{email}", headers=cf_headers)
         if check_request(r, "cf"):
             if action == 'full':
-                data = {
-                    'user': {
-                        'email': email,
-                        'imageUrl': gen_def_av(email)
-                    }
-                }
-                user_id = get_user_id(email)
-                cr = client.update_user(user_id, data)
-                if cr.was_successful():
+                r = gen_def_av(email)
+                if avatar_error_handler(r):
                     return {'response': 'Successfully Deleted', 'code': '2001'}
                 return {'error': 'Failed to Remove From User Data', 'code': '3002'}
             else:
@@ -291,9 +277,9 @@ async def user_avatar_update(__token__: str = '', email: str = 'example@example.
         if avatar_error_handler(r):
             r2 = await user_avatar_new(__token__, email, u)
             if avatar_error_handler(r2):
-                return {'response': 'Avatar Update Succeeded', 'code': '2003'}
-            return {'error': 'Failed to Delete Old Avatar', 'code': '3011'}
-        return {'error': 'Failed to Delete Old Avatar', 'code': '3013'}
+                return {'response': 'Avatar Update Succeeded', 'code': 2003}
+            return {'error': 'Failed to Create Avatar', 'code': 3011}
+        return {'error': 'Failed to Delete Old Avatar', 'code': 3013}
     return auth_error
 
 
