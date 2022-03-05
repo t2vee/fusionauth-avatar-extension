@@ -230,7 +230,8 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                         letters = string.ascii_letters
                         kv = ''.join(random.choice(letters) for _ in range(64))
                         r = requests.put(
-                            f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('CKP')}/values/{convert_md5(email)}", headers=cf_headers, json=f"{kv}{file_ext}")
+                            f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('CKP')}/values/{convert_md5(email)}",
+                            headers=cf_headers, json=f"{kv}{file_ext}")
                         if check_request(r, "cf"):
                             fullfile = os.path.join(os.environ.get('UF'), kv + file_ext)
                             with open(fullfile, "wb+") as fi:
@@ -330,13 +331,13 @@ async def webhook_avatar_email_update(response: Response, req: Request,
             f"/values/{prev_email}", headers=cf_headers)
         if check_request(r, "cf"):
             r2 = requests.delete(f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                                 f"/{os.environ.get('CKP')}/values/{prev_email}", headers=cf_headers)
+                                 f"/{os.environ.get('CKP')}/values/{convert_md5(prev_email)}", headers=cf_headers)
             if check_request(r2, "cf"):
                 avatar = r.text.replace('\\', '')
                 avatar2 = avatar.replace('"', '')
                 r3 = requests.put(
                     f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-                    f"/{os.environ.get('CKP')}/values/{email}", headers=cf_headers, json=avatar2)
+                    f"/{os.environ.get('CKP')}/values/{convert_md5(email)}", headers=cf_headers, json=avatar2)
                 if check_request(r3, "cf"):
                     response.status_code = 200
                     return {'error': 'Email key-pair Updated', 'code': '2006'}
