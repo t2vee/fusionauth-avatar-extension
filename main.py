@@ -7,6 +7,7 @@ import string
 import hashlib
 import requests
 import pydenticon
+from PIL import Image
 from os.path import join, dirname
 from dotenv import load_dotenv, set_key
 from fastapi import FastAPI, File, UploadFile, Response, Request, Header, WebSocket
@@ -26,7 +27,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv(dotenv_path)
 app.secret_key = os.urandom(24)
-UPLOAD_EXTENSIONS = {'.jpg', '.png', '.webp'}
+UPLOAD_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
 client = FusionAuthClient(os.environ.get('FA_KEY'), os.environ.get('FA_URL'))
 app.add_middleware(
     CORSMiddleware,
@@ -54,7 +55,7 @@ def generate_keypairs():
         p = json.loads(r.text)
         ap = json.loads(ar.text)
         bp = json.loads(br.text)
-        cp = json.loads(br.text)
+        cp = json.loads(cr.text)
         k = p['success']
         if k:
             os.environ['CKP'] = p['result']['id']
@@ -120,14 +121,14 @@ def file_size_in_mb(bytes_size):
 
 
 def gen_def_av(email):
-    identicon = id_gen.generate(email, 240, 240, output_format="png")
+    identicon = id_gen.generate(email, 240, 240, output_format="webp")
     letters = string.ascii_letters
     kv = ''.join(random.choice(letters) for _ in range(64))
     r = requests.put(
         f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces"
-        f"/{os.environ.get('CKP')}/values/{convert_md5(email)}", headers=cf_headers, json=f"{kv}.png")
+        f"/{os.environ.get('CKP')}/values/{convert_md5(email)}", headers=cf_headers, json=f"{kv}.webp")
     if check_request(r, "cf"):
-        fullfile = os.path.join(os.environ.get('UF'), kv + '.png')
+        fullfile = os.path.join(os.environ.get('UF'), kv + '.webp')
         with open(fullfile, "wb+") as fi:
             fi.write(identicon)
             fi.close()
@@ -148,6 +149,11 @@ def gen_def_av(email):
 def convert_md5(email):
     email_hash = hashlib.md5(email.encode())
     return email_hash.hexdigest()
+
+
+def convert_to_webp(file):
+    c = Image.open(file).convert("RGB")
+    c.save()
 
 
 @app.get('/')
@@ -224,23 +230,22 @@ async def user_avatar_new(__token__: str = '', email: str = 'example@example.com
                         kv = ''.join(random.choice(letters) for _ in range(64))
                         r = requests.put(
                             f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('CKP')}/values/{convert_md5(email)}",
-                            headers=cf_headers, json=f"{kv}{file_ext}")
+                            headers=cf_headers, json=f"{kv}.webp")
                         if check_request(r, "cf"):
-                            fullfile = os.path.join(os.environ.get('UF'), kv + file_ext)
-                            with open(fullfile, "wb+") as fi:
-                                fi.write(fs)
-                                fi.close()
-                                data = {
-                                    'user': {
-                                        'email': email,
-                                        'imageUrl': user_avatar(convert_md5(email))['response']
-                                    }
+                            fullfile = os.path.join(os.environ.get('UF'), kv + '.webp')
+                            c = Image.open(u.file).convert("RGB")
+                            c.save(fullfile, 'webp')
+                            data = {
+                                'user': {
+                                    'email': email,
+                                    'imageUrl': user_avatar(convert_md5(email))['response']
                                 }
-                                user_id = get_user_id(email)
-                                cr = client.update_user(user_id, data)
-                                if cr.was_successful():
-                                    return {'response': 'Image Uploaded', 'code': 2002}
-                                return {'error': 'Failed to Add Image to User Profile', 'code': 3008}
+                            }
+                            user_id = get_user_id(email)
+                            cr = client.update_user(user_id, data)
+                            if cr.was_successful():
+                                return {'response': 'Image Uploaded', 'code': 2002}
+                            return {'error': 'Failed to Add Image to User Profile', 'code': 3008}
                         return {'error': 'Creating File Key Failed', 'code': 3007}
                     return {'error': 'File is Invalid', 'code': 3006}
                 return {'error': 'File Type Not Allowed', 'code': 3005}
