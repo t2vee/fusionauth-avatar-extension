@@ -1,9 +1,22 @@
-# t2vAvatarAPI
-Used as a api backend made with python and fastapi for t2v and its subsidiaries.
+# fusionauth-avatar-extension
+A avatar management api for fusionauth made with fastapi and cloudflare kv.
+Cloudflare KV is used to store emails => avatar tokens instead of md5 which is more privacy secure.
+
+
+# Setup
 
 To setup for Cloudflare Workers branch:
 Coming Soon
 
+It is reccomended to use docker-compose to setup.
+Just git clone the repository,
+Fill out the .env.example
+Run docker-compose up -d
+
+-> Instructions for Fusionauth webhooks coming soon <-
+
+
+# LEGACY INSTALL
 
 To setup for FastAPI brnach:
 </br>Install Python 3.10 or newer
