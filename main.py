@@ -171,35 +171,6 @@ async def api_status_get(request: Request, websocket: WebSocket, __token__: str 
     # while True:
     return None
 
-
-# TODO Fix Whois Lookup
-@app.get('/api/v1/whois/lookup')
-def whois_lookup(d: str = None):
-    if d is not None:
-        w = whois.query(d)
-        return w
-    return {'error': 'Invalid Domain', 'code': '3009'}
-
-
-# TODO Finish Blog Post Admin Panel
-@app.get('/api/v1/blog/posts/{type}/{page}')
-def blog_posts_query(page, post_type):
-    r = requests.get(
-        f"{os.environ.get('CF_EP')}accounts/{os.environ.get('CF_AC')}/storage/kv/namespaces/{os.environ.get('BI')}"
-        f"/values/keys?prefix={post_type}_{page}", headers=cf_headers)
-    if check_request(r, "cf"):
-        return r
-    return cf_error
-
-
-@app.post('/api/v1/blog/admin/post/create')
-def blog_posts_create(__token__: str = '', ):
-    cft = apikeycheck(__token__)
-    if cft:
-        return None
-    return auth_error
-
-
 @app.get('/api/v1/id/u/{email_hash}/inventory/avatar')
 def user_avatar(email_hash: str = 'example@example.com'):
     r = requests.get(
@@ -216,7 +187,7 @@ def user_avatar(email_hash: str = 'example@example.com'):
 async def user_avatar_new(__token__: str = '', email: str = 'example@example.com', u: UploadFile = File(...)):
     cft = apikeycheck(__token__)
     if cft:
-        # TODO Grab NSFW Check from Client JS
+        # TODO Grab NSFW image check from nsfwjs
         filename = secure_filename(u.filename)
         img_check = imghdr.what(u.file)
         if filename != '':
