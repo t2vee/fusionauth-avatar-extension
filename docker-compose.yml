@@ -1,14 +1,58 @@
-version: "3.3"
+version: "3.9"
 services:
-  server:
-    build: .
-    env_file:
-      - .env
+  lfp:
+    image: tea.t2v.ch/t2v/avatar-fusionauth-plugin:latest
     ports:
-      - "8080:8082"
+      - "8080:8080"
     volumes:
-      - avatar_storage:/data/avatars
-      
-volumes:
-  avatar_storage:
+      - ./avatars:/data/avatars
+    environment:
+      # GENERAL API SETTINGS
+      # Max Upload Size (in KB). e.g=15000
+      MUS:
+      # Url that serves Avatar Images (DO NOT INCLUDE HTTPS, MUST HAVE SSL)
+      AV_URL:
+      # Url this API is hosted on
+      HOST_URL:
 
+      # FUSIONAUTH SETTINGS
+      # API Key
+      FA_KEY:
+      # FusionAuth Application ID
+      CLIENT_ID:
+      # Application Client Secret
+      CLIENT_SECRET:
+      # FusionAuth Host URL
+      FA_URL:
+
+      # CLOUDFLARE SETTINGS FOR KV
+      # Current endpoint is the recommended endpoint
+      CF_EP: https://api.cloudflare.com/client/v4/
+      # Cloudflare Account Identifier
+      CF_AC:
+      # Cloudflare Email
+      CF_EMAIL:
+      # Cloudflare API Key
+      CF_KEY:
+
+      # KV SETTINGS (WILL BE GENERATED ON FIRST RUN)
+      # API Token Authentication KV Namespace
+      TCNSID:
+      # Avatar CDN KeyPair KV Namespace
+      CKP:
+      # Blog Post Index KV Namespace
+      BPI:
+      # Link Key Index KV Namespace
+      LKI:
+
+      # DO NOT CHANGE THESE SETTINGS
+      FTS: False
+      UF: /data/avatars
+      V: A.0.0.7
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./avatars:/usr/share/nginx/html

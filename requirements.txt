@@ -1,4 +1,5 @@
 python-dotenv==0.19.2
+fusionauth-client~=1.36.0
 requests==2.27.1
 Werkzeug==2.0.2
 whois~=0.9.13
