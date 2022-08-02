@@ -9,9 +9,10 @@
 </br>Coming Soon
 
 </br>It is reccomended to use docker-compose to setup.
-</br>Just git clone the repository,
-</br>Fill out the .env.example
+</br>Download and place https://tea.t2v.ch/t2v/avatar-fusionauth-plugin/src/branch/workers/docker-compose.yml in your working directory 
+</br>Fill out the enviroment variables in the docker-compose.yml file
 </br>Run docker-compose up -d
+</br>Forward a domain to port 8080 and 80
 
 -> Instructions for Fusionauth webhooks coming soon <-
 
