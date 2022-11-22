@@ -6,4 +6,4 @@ whois~=0.9.13
 fastapi~=0.73.0
 slowapi~=0.1.5
 pydenticon~=0.3.1
-Pillow~=9.0.1
+pillow>=9.2.0
